@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import sys
 import zmq
 import pickle
+import time
 
 from matplotlib.backends.backend_qt5agg import FigureCanvas
 from matplotlib.figure import Figure
@@ -194,19 +195,19 @@ class ZoNexus_Client():
         if self.pixelSize is not None:
             self.move_compustage(dX=float(x)*self.pixelSize, dY=float(y)*self.pixelSize) # X AND Y MAY NEED SWAPPING AND/OR INVERTING
             
-    def centering(refImage, xymax=100e-9, ntries=4, df_range=None, cal_factor=1.0):
+    def centering(self, refImage, search_dwell, search_size, search_mag, xymax=100e-9, ntries=4, df_range=None, cal_factor=1.0):
         NOT_CENTERED = True
-        
+
         while NOT_CENTERED and ntries > 0:
             '''
             # NEEDS IMPLEMENTING
             if df_range is not None:
                 focusing(df_range)
             '''
-            curImage, pixelSize = acquire_image(search_dwell, search_size, search_mag)
-            
+            curImage, pixelSize = self.acquire_image(search_dwell, search_size, search_mag)
+
             offset = registration(refImage, curImage, pixelSize) # Perform registration
-            self.status_cb('offset = ', offset) # for debugging
+            self.status_cb(f'offset = {offset}') # for debugging
             if abs(offset[0]) > xymax or abs(offset[1]) > xymax: # Move if needed
                 ntries +=-1
                 self.move_compustage(dX=offset[0]*cal_factor, dY=-offset[1]*cal_factor) # y may need positive or negative sign depending on eucentric height
@@ -214,39 +215,43 @@ class ZoNexus_Client():
             else:
                 NOT_CENTERED = False
                 self.status_cb('Centered')
-        
+
         if NOT_CENTERED and ntries <= 0:
             raise ValueError('Number of attempts to center has exceeded ntries')
     
-    def acquire_tilt_series(n_tilts, tilt_step,
+    def acquire_tilt_series(self, n_tilts, tilt_step,
                             search_dwell, search_size, search_mag,
                             acquire_dwell, acquire_size, acquire_mag,
                             close_valve_at_end=False,
                             cent_xymax=40e-9, cent_ntries=12, cent_cal_factor=1.1,
                             alpha_callback=None, status_callback=None, canvas_callback=None, stopped_callback=None):
-        
+
         self.set_callbacks(alpha_callback, status_callback, canvas_callback, stopped_callback)
-        
+
         self.status_cb('tilt_no = 0')
-        
-        self.tilt_series_images = np.zeros((n_angles, acquire_size, acquire_size))
-        refImage, calX = acquire_image(acquire_dwell, acquire_size, acquire_mag) # take initial (also refeience) image
+
+        self.tilt_series_images = np.zeros((n_tilts, acquire_size, acquire_size))
+        refImage, calX = self.acquire_image(acquire_dwell, acquire_size, acquire_mag) # take initial (also reference) image
         self.tilt_series_images[0] = refImage
-        
-        for tilt_no in range(1, n_angles):
+
+        response = self.send_traffic({'type': 'get_zn_alpha'})
+        current_alpha = response['reply_data'] if response is not None else 0.0
+
+        for tilt_no in range(1, n_tilts):
 
             self.status_cb(f'tilt_no = {tilt_no}')
-            
+
             ''' Tilt by tilt_step '''
-            dA = np.deg2rad(tilt_step)
-            move_stage_delta(dA=dA)
-            
+            current_alpha += tilt_step
+            self.set_alpha_zn(current_alpha)
+
             ''' Centering '''
-            self.centering(refImage, xymax=cent_xymax, ntries=cent_ntries, cal_factor=cent_cal_factor)
-                
+            self.centering(refImage, search_dwell, search_size, search_mag,
+                           xymax=cent_xymax, ntries=cent_ntries, cal_factor=cent_cal_factor)
+
             ''' Acquire HAADF image '''
-            self.tilt_series_images[tilt_no], _ = acquire_image(acquire_dwell, acquire_size)
-                
+            self.tilt_series_images[tilt_no], _ = self.acquire_image(acquire_dwell, acquire_size, acquire_mag)
+
         if close_valve_at_end:
             self.close_column_valve()
         
