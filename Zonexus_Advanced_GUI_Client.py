@@ -86,7 +86,7 @@ class ZoNexus_Client():
         if response is not None and response.get('reply_data') == 'pinged':
             print('Connected to ZoNexus server!')
             self.status_cb('Connected to ZoNexus server!')
-            
+
     def status_cb(self, message):
         if self.status_callback is not None:
             self.status_callback.emit(pickle.dumps(message))
@@ -469,8 +469,8 @@ class ZoNexus_GUI(QWidget):
         self.tracker.setText(f'Tracker:')
         
 if __name__ == "__main__":
-    #host = '192.168.0.101'
-    host = 'localhost'
+    host = '192.168.0.101'
+    # host = 'localhost'
     port = 7001
         
     app = QApplication(sys.argv)
