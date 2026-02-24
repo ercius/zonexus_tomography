@@ -81,7 +81,12 @@ class ZoNexus_Client():
         self.ClientSocket.connect(f"tcp://{host}:{port}")
         print(f'Connecting to ZoNexus server at {host}:{port}...')
         self.status_cb(f'Connecting to ZoNexus server at {host}:{port}...')
-    
+
+        response = self.send_traffic({'type': 'ping'})
+        if response is not None and response.get('reply_data') == 'pinged':
+            print('Connected to ZoNexus server!')
+            self.status_cb('Connected to ZoNexus server!')
+            
     def status_cb(self, message):
         if self.status_callback is not None:
             self.status_callback.emit(pickle.dumps(message))
